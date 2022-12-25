@@ -88,14 +88,13 @@ async function generateAuthCode(secret, timeDiff = 0) {
 
   secret = base64ToArrayBuffer(secret);
 
-  let time = getTime(timeDiff);
+  let time = Math.floor(getTime(timeDiff) / 30);
 
-  let buffer = new Uint32Array(new ArrayBuffer(8));
+  let buffer = new Uint8Array(new ArrayBuffer(8));
   // The first 4 bytes are the high 4 bytes of a 64-bit integer. To make things easier on ourselves, let's just pretend
   // that it's a 32-bit int and write 0 for the high bytes. Since we're dividing by 30, this won't cause a problem
   // until the year 6053.
-  buffer[0] = 0;
-  buffer[1] = Math.floor(time / 30);
+  buffer.set([ 0, 0, 0, 0, time >>> 24, time >>> 16, time >>> 8, time ]);
 
   const hmac = await crypto.subtle.importKey(
     'raw',
@@ -109,9 +108,14 @@ async function generateAuthCode(secret, timeDiff = 0) {
   const hmacArray = new Uint8Array(hmacValue);
 
   let offset = hmacArray[hmacArray.length - 1] & 0x0F;
-  const view = new Uint32Array(hmacArray.slice(offset, offset + 4));
+  
+  let u32BE = 0;
+  for (let i = 0; i < 4; i++) {
+    u32BE <<= 8;
+    u32BE |= hmacArray[offset + i];
+  }
 
-  let fullcode = view[0] & 0x7FFFFFFF;
+  let fullcode = u32BE & 0x7FFFFFFF;
 
   const chars = '23456789BCDFGHJKMNPQRTVWXY';
 
