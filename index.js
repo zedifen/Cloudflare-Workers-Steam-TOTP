@@ -10,7 +10,7 @@ async function handleRequest(request) {
   const checkDiff = url.searchParams.get("check");
   let code;
   if (checkDiff) {
-    const { err, diff, elapsed } = await getTimeOffset();
+    const { err, diff, elapsed } = await getTimeDiff();
     if (err) {
       return new Response(err.message);
     } else {
@@ -42,7 +42,7 @@ function base64ToArrayBuffer(base64) {
   return bytes.buffer;
 }
 
-async function getTimeOffset() {
+async function getTimeDiff() {
   const start = Date.now();
   const steamTimeApi = 'https://api.steampowered.com/ITwoFactorService/QueryTime/v1/';
   const localTime = getTime();
