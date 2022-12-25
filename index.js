@@ -7,12 +7,20 @@ export default {
 async function handleRequest(request) {
   const url = new URL(request.url);
   const secret = url.searchParams.get("q") || 'cnOgv/KdpLoP6Nbh0GMkXkPXALQ=';
-  const { err, diff, elpased } = getTimeOffset();
-  if (err) {
-    return new Response(err.message);
+  const checkDiff = url.searchParams.get("check");
+  let code;
+  if (checkDiff) {
+    const { err, diff, elapsed } = await getTimeOffset();
+    if (err) {
+      return new Response(err.message);
+    } else {
+      console.log(`diff: ${diff}s, elpased: ${elapsed}ms`);
+      code = await generateAuthCode(secret, diff);
+    }
   } else {
-    return new Response(await generateAuthCode(secret, diff));
+    code = await generateAuthCode(secret, 0);
   }
+  return new Response(code);
 }
 
 /**
@@ -35,12 +43,14 @@ function base64ToArrayBuffer(base64) {
 }
 
 async function getTimeOffset() {
-  let start = Date.now();
+  const start = Date.now();
   const steamTimeApi = 'https://api.steampowered.com/ITwoFactorService/QueryTime/v1/';
+  const localTime = getTime();
   let obj = {
     err: null,
     diff: 0,  // In seconds
     elapsed: 0,
+    response: null,
   };
   await fetch(steamTimeApi, {
     method: 'POST',
@@ -49,7 +59,6 @@ async function getTimeOffset() {
     }
   })
     .then((res) => {
-      console.log(res.status);
       if (res.status != 200) {
         console.log(`HTTP error ${res.status}.`)
         obj.err = new Error(`HTTP error ${res.status}.`);
@@ -57,11 +66,12 @@ async function getTimeOffset() {
       }
       return res.json();
     })
-    .then((data) => {
-      if (!data || !data.server_time) {
+    .then(({response: data}) => {
+      if (!data || !data['server_time']) {
         obj.err = new Error("Malformed response");
       } else {
-        obj.diff = data['server_time'] - getTime();
+        obj.diff = data['server_time'] - localTime;
+        obj.response = data;
       }
     });
   obj.elapsed = Date.now() - start;
@@ -80,8 +90,7 @@ async function generateAuthCode(secret, timeDiff = 0) {
 
   let time = getTime(timeDiff);
 
-  let arrayBuffer = new ArrayBuffer(8);
-  let buffer = new Uint32Array(arrayBuffer);
+  let buffer = new Uint32Array(new ArrayBuffer(8));
   // The first 4 bytes are the high 4 bytes of a 64-bit integer. To make things easier on ourselves, let's just pretend
   // that it's a 32-bit int and write 0 for the high bytes. Since we're dividing by 30, this won't cause a problem
   // until the year 6053.
